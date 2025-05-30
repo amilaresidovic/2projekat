@@ -9,7 +9,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: [
-      "__ALB_DNS__",
+      process.env.ALB_DNS || "projekat2-alb-820038387.us-east-1.elb.amazonaws.com",
       "localhost",
       "127.0.0.1",
     ],
