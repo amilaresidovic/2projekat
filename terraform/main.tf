@@ -148,20 +148,6 @@ sudo chown ec2-user:ec2-user /mnt/db_data
 sudo mkdir -p /mnt/db_data/postgresql
 git clone https://github.com/amilaresidovic/projekat2.git /home/ec2-user/projekat2
 cd /home/ec2-user/projekat2
-for i in {1..30}; do
-  alb_dns=$(aws elbv2 describe-load-balancers \
-    --names projekat2-alb \
-    --query 'LoadBalancers[0].DNSName' \
-    --output text \
-    --region us-east-1 2>/dev/null)
-  if [[ "$alb_dns" != "None" && "$alb_dns" != "" ]]; then
-    break
-  fi
-  sleep 10
-done
-
-
-sed -i "/allowedHosts: \[/a\      \"$alb_dns\"," frontend/vite.config.js
 sudo ln -s /mnt/db_data/postgresql /home/ec2-user/projekat2/db_data
 sudo docker-compose build
 sudo docker-compose up -d

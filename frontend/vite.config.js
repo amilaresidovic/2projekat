@@ -9,9 +9,10 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: [
-      
+      "projekat2-alb-2048933755.us-east-1.elb.amazonaws.com",
       "localhost",
-      "127.0.0.1"
+      "127.0.0.1",
     ],
+   
   },
 });
