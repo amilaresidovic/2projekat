@@ -69,48 +69,61 @@ resource "aws_route_table_association" "public_rt_assoc_b" {
 resource "aws_security_group" "ec2_sg" {
   vpc_id = aws_vpc.main.id
   name   = "ec2-sg"
+  
+  
   ingress {
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
   }
+  
   ingress {
     from_port       = 5000
     to_port         = 5000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
   }
+  
+  
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] 
+    cidr_blocks = ["0.0.0.0/0"]
   }
+  
+ 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  
   tags = { Name = "projekat2-ec2-sg" }
 }
 
 resource "aws_security_group" "alb_sg" {
   vpc_id = aws_vpc.main.id
   name   = "alb-sg"
+  
+  
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  
+  
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  
   tags = { Name = "projekat2-alb-sg" }
 }
 
@@ -128,63 +141,84 @@ resource "aws_instance" "app_instance" {
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   iam_instance_profile   = "LabInstanceProfile"
   key_name               = "vockey"
-  user_data              = <<EOF
-#!/bin/bash
-exec > /var/log/user-data.log 2>&1 
-set -x 
-
-echo "Početak User Data skripte" >> /var/log/user-data.log
-
-
-sudo yum update -y
-sudo yum install -y docker git
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker ec2-user
-
-
-sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-sudo mkfs.ext4 /dev/xvdf
-sudo mkdir -p /mnt/db_data
-sudo mount /dev/xvdf /mnt/db_data
-sudo chown ec2-user:ec2-user /mnt/db_data
-sudo mkdir -p /mnt/db_data/postgresql
-
-
-git clone https://github.com/amilaresidovic/projekat2.git /home/ec2-user/projekat2
-cd /home/ec2-user/projekat2
-
-cat > /home/ec2-user/projekat2/vite.config.js <<VITECONFIG
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  base: "/",
-  plugins: [react()],
-  server: {
-    port: 8080,
-    strictPort: true,
-    host: "0.0.0.0",
-    allowedHosts: [
-      "${aws_lb.app_alb.dns_name}",
-      "localhost",
-      "127.0.0.1",
-    ],
-  },
-});
-VITECONFIG
-
-
-sudo ln -s /mnt/db_data/postgresql /home/ec2-user/projekat2/db_data
-
-
-sudo docker-compose build
-sudo docker-compose up -d
-
-echo "Završetak User Data skripte" >> /var/log/user-data.log
-EOF
+  
+  user_data = <<-EOF
+    #!/bin/bash
+    exec > /var/log/user-data.log 2>&1
+    set -x
+    
+    echo "*** Početak User Data skripte ***"
+    
+    
+    sudo yum update -y
+    sudo yum install -y docker git jq
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    sudo usermod -aG docker ec2-user
+    
+    
+    sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" \
+      -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+    
+   
+    sudo mkfs.ext4 /dev/xvdf
+    sudo mkdir -p /mnt/db_data
+    sudo mount /dev/xvdf /mnt/db_data
+    sudo chown ec2-user:ec2-user /mnt/db_data
+    sudo mkdir -p /mnt/db_data/postgresql
+    
+    
+    git clone https://github.com/amilaresidovic/projekat2.git /home/ec2-user/projekat2
+    cd /home/ec2-user/projekat2
+    
+    
+    ALB_DNS=$(aws elbv2 describe-load-balancers --names projekat2-alb --query 'LoadBalancers[0].DNSName' --output text)
+    
+    cat > /home/ec2-user/projekat2/vite.config.js <<VITECONFIG
+    import { defineConfig } from "vite";
+    import react from "@vitejs/plugin-react";
+    
+    export default defineConfig({
+      base: "/",
+      plugins: [react()],
+      server: {
+        port: 8080,
+        strictPort: true,
+        host: "0.0.0.0",
+        allowedHosts: [
+          "${ALB_DNS}",
+          "localhost",
+          "127.0.0.1",
+        ],
+      },
+    });
+    VITECONFIG
+    
+    
+    sudo ln -s /mnt/db_data/postgresql /home/ec2-user/projekat2/db_data
+    
+    
+    sudo docker-compose build
+    sudo docker-compose up -d
+    
+    
+    echo "Čekam da aplikacija bude spremna..."
+    for i in {1..30}; do
+      if curl -s http://localhost:8080 >/dev/null; then
+        echo "Aplikacija je pokrenuta!"
+        break
+      fi
+      sleep 10
+      echo "Pokušaj $i/30: Aplikacija još nije spremna..."
+    done
+    
+    echo "*** Završetak User Data skripte ***"
+    
+    
+    sudo docker ps -a >> /var/log/user-data.log
+    curl -I http://localhost:8080 >> /var/log/user-data.log
+    EOF
 
   tags = { Name = "projekat2-app-instance" }
 
@@ -193,7 +227,6 @@ EOF
     aws_ebs_volume.db_volume
   ]
 }
-
 
 resource "aws_volume_attachment" "ebs_attachment" {
   device_name = "/dev/xvdf"
@@ -207,41 +240,52 @@ resource "aws_lb" "app_alb" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = [aws_subnet.public_subnet_a.id, aws_subnet.public_subnet_b.id]
-  tags               = { Name = "projekat2-alb" }
+  
+  enable_deletion_protection = false
+  
+  tags = { Name = "projekat2-alb" }
 }
 
 resource "aws_lb_target_group" "frontend_tg" {
-  name        = "frontend-tg"
+  name        = "projekat2-frontend-tg"
   port        = 8080
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "instance"
+  
   health_check {
     path                = "/"
     protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 30
-    timeout             = 5
+    port                = "traffic-port"
     healthy_threshold   = 3
     unhealthy_threshold = 3
+    timeout             = 10
+    interval            = 30
+    matcher             = "200-399"
   }
+  
+  tags = { Name = "projekat2-frontend-tg" }
 }
 
 resource "aws_lb_target_group" "backend_tg" {
-  name        = "backend-tg"
+  name        = "projekat2-backend-tg"
   port        = 5000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "instance"
+  
   health_check {
-    path                = "/" 
+    path                = "/api/health"
     protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 30
-    timeout             = 5
+    port                = "traffic-port"
     healthy_threshold   = 3
     unhealthy_threshold = 3
+    timeout             = 10
+    interval            = 30
+    matcher             = "200-399"
   }
+  
+  tags = { Name = "projekat2-backend-tg" }
 }
 
 resource "aws_lb_target_group_attachment" "frontend_tg_attachment" {
@@ -260,6 +304,7 @@ resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.app_alb.arn
   port              = 80
   protocol          = "HTTP"
+  
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.frontend_tg.arn
@@ -269,13 +314,23 @@ resource "aws_lb_listener" "http" {
 resource "aws_lb_listener_rule" "backend_rule" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 100
+  
   action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.backend_tg.arn
   }
+  
   condition {
     path_pattern {
       values = ["/api/*"]
     }
   }
+}
+
+output "alb_dns_name" {
+  value = aws_lb.app_alb.dns_name
+}
+
+output "instance_public_ip" {
+  value = aws_instance.app_instance.public_ip
 }
