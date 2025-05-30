@@ -128,57 +128,46 @@ resource "aws_instance" "app_instance" {
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   iam_instance_profile   = "LabInstanceProfile"
   key_name               = "vockey"
-  user_data = <<EOF
+  user_data              = <<EOF
 #!/bin/bash
-exec > /var/log/user-data.log 2>&1
-set -x
+exec > /var/log/user-data.log 2>&1 
+set -x 
 
-
+echo "Početak User Data skripte" >> /var/log/user-data.log
+sudo yum update -y
 sudo yum install -y docker git
 sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -aG docker ec2-user
 sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
-
-
 sudo mkfs.ext4 /dev/xvdf
 sudo mkdir -p /mnt/db_data
 sudo mount /dev/xvdf /mnt/db_data
 sudo chown ec2-user:ec2-user /mnt/db_data
 sudo mkdir -p /mnt/db_data/postgresql
-
-
 git clone https://github.com/amilaresidovic/projekat2.git /home/ec2-user/projekat2
-
-ALB_DNS="${aws_lb.app_alb.dns_name}"
-cat <<EOL > /home/ec2-user/projekat2/vite.config.js
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  base: "/",
-  plugins: [react()],
-  server: {
-    port: 8080,
-    strictPort: true,
-    host: "0.0.0.0",
-    allowedHosts: [
-      "$ALB_DNS",
-      "localhost",
-      "127.0.0.1",
-    ],
-  },
-});
-EOL
-
-
 cd /home/ec2-user/projekat2
-sudo ln -s /mnt/db_data/postgresql db_data
+for i in {1..30}; do
+  alb_dns=$(aws elbv2 describe-load-balancers \
+    --names projekat2-alb \
+    --query 'LoadBalancers[0].DNSName' \
+    --output text \
+    --region us-east-1 2>/dev/null)
+  if [[ "$alb_dns" != "None" && "$alb_dns" != "" ]]; then
+    break
+  fi
+  sleep 10
+done
+
+
+sed -i "/allowedHosts: \[/a\      \"$alb_dns\"," frontend/vite.config.js
+sudo ln -s /mnt/db_data/postgresql /home/ec2-user/projekat2/db_data
 sudo docker-compose build
 sudo docker-compose up -d
-
+echo "Završetak User Data skripte" >> /var/log/user-data.log
 EOF
+  tags = { Name = "projekat2-app-instance" }
 }
 
 resource "aws_volume_attachment" "ebs_attachment" {
