@@ -135,6 +135,7 @@ set -x
 
 echo "Početak User Data skripte" >> /var/log/user-data.log
 
+
 sudo yum update -y
 sudo yum install -y docker git aws-cli
 sudo systemctl start docker
@@ -174,7 +175,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: [
-      "\${ALB_DNS}",
+      "$${ALB_DNS}",
       "localhost",
       "127.0.0.1",
     ],
