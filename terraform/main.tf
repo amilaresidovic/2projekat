@@ -149,32 +149,26 @@ resource "aws_instance" "app_instance" {
     
     echo "*** Početak User Data skripte ***"
     
-    
     sudo yum update -y
     sudo yum install -y docker git jq
     sudo systemctl start docker
     sudo systemctl enable docker
     sudo usermod -aG docker ec2-user
     
-    
     sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" \
       -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
     
-   
     sudo mkfs.ext4 /dev/xvdf
     sudo mkdir -p /mnt/db_data
     sudo mount /dev/xvdf /mnt/db_data
     sudo chown ec2-user:ec2-user /mnt/db_data
     sudo mkdir -p /mnt/db_data/postgresql
     
-    
     git clone https://github.com/amilaresidovic/projekat2.git /home/ec2-user/projekat2
     cd /home/ec2-user/projekat2
     
-    
-    ALB_DNS=$(aws elbv2 describe-load-balancers --names projekat2-alb --query 'LoadBalancers[0].DNSName' --output text)
-    
+   
     cat > /home/ec2-user/projekat2/vite.config.js <<VITECONFIG
     import { defineConfig } from "vite";
     import react from "@vitejs/plugin-react";
@@ -186,22 +180,14 @@ resource "aws_instance" "app_instance" {
         port: 8080,
         strictPort: true,
         host: "0.0.0.0",
-        allowedHosts: [
-          "${ALB_DNS}",
-          "localhost",
-          "127.0.0.1",
-        ],
       },
     });
     VITECONFIG
     
-    
     sudo ln -s /mnt/db_data/postgresql /home/ec2-user/projekat2/db_data
-    
     
     sudo docker-compose build
     sudo docker-compose up -d
-    
     
     echo "Čekam da aplikacija bude spremna..."
     for i in {1..30}; do
@@ -215,10 +201,9 @@ resource "aws_instance" "app_instance" {
     
     echo "*** Završetak User Data skripte ***"
     
-    
     sudo docker ps -a >> /var/log/user-data.log
     curl -I http://localhost:8080 >> /var/log/user-data.log
-    EOF
+EOF
 
   tags = { Name = "projekat2-app-instance" }
 
