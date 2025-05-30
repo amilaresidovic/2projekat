@@ -327,10 +327,3 @@ resource "aws_lb_listener_rule" "backend_rule" {
   }
 }
 
-output "alb_dns_name" {
-  value = aws_lb.app_alb.dns_name
-}
-
-output "instance_public_ip" {
-  value = aws_instance.app_instance.public_ip
-}
