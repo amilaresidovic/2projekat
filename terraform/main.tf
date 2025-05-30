@@ -85,7 +85,7 @@ resource "aws_security_group" "ec2_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] 
   }
   egress {
     from_port   = 0
@@ -128,42 +128,29 @@ resource "aws_instance" "app_instance" {
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   iam_instance_profile   = "LabInstanceProfile"
   key_name               = "vockey"
-  user_data              = <<EOF
+
+  user_data = <<EOF
 #!/bin/bash
 exec > /var/log/user-data.log 2>&1
 set -x
 
 echo "Početak User Data skripte" >> /var/log/user-data.log
-
-
 sudo yum update -y
-sudo yum install -y docker git aws-cli
+sudo yum install -y docker git
 sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -aG docker ec2-user
-
-
-sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
-
-
 sudo mkfs.ext4 /dev/xvdf
 sudo mkdir -p /mnt/db_data
 sudo mount /dev/xvdf /mnt/db_data
 sudo chown ec2-user:ec2-user /mnt/db_data
 sudo mkdir -p /mnt/db_data/postgresql
 
-
 git clone https://github.com/amilaresidovic/2projekat.git /home/ec2-user/projekat2
-cd /home/ec2-user/projekat2
-sudo ln -s /mnt/db_data/postgresql /home/ec2-user/projekat2/db_data
 
-
-ALB_DNS=$(aws elbv2 describe-load-balancers --names "projekat2-alb" --query "LoadBalancers[0].DNSName" --output text)
-echo "ALB DNS: $ALB_DNS" >> /var/log/user-data.log
-
-
-cat > /home/ec2-user/projekat2/frontend/vite.config.js <<EOL
+cat > /home/ec2-user/projekat2/vite.config.js <<EOL
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -175,7 +162,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: [
-      "$${ALB_DNS}",
+      "${aws_lb.app_alb.dns_name}",
       "localhost",
       "127.0.0.1",
     ],
@@ -183,16 +170,20 @@ export default defineConfig({
 });
 EOL
 
+chown ec2-user:ec2-user /home/ec2-user/projekat2/vite.config.js
 
-cat /home/ec2-user/projekat2/frontend/vite.config.js >> /var/log/user-data.log
-
-
+cd /home/ec2-user/projekat2
+sudo ln -s /mnt/db_data/postgresql /home/ec2-user/projekat2/db_data
 sudo docker-compose build
 sudo docker-compose up -d
+
 echo "Završetak User Data skripte" >> /var/log/user-data.log
 EOF
+
   tags = { Name = "projekat2-app-instance" }
 }
+
+
 
 resource "aws_volume_attachment" "ebs_attachment" {
   device_name = "/dev/xvdf"
@@ -233,7 +224,7 @@ resource "aws_lb_target_group" "backend_tg" {
   vpc_id      = aws_vpc.main.id
   target_type = "instance"
   health_check {
-    path                = "/"
+    path                = "/" 
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30
